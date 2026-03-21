@@ -264,8 +264,9 @@ int main(int argc, char** argv) {
             throw std::runtime_error("Cannot open camera index " + std::to_string(opt.cameraIndex));
         }
 
-        cap.set(cv::CAP_PROP_FRAME_WIDTH, 1280);
-        cap.set(cv::CAP_PROP_FRAME_HEIGHT, 720);
+        // Use 640x480 for more consistent webcam capture quality and performance.
+        cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
+        cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
 
         DrowsinessMonitor monitor;
         DrowsinessState prevState = DrowsinessState::Unknown;

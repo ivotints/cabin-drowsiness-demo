@@ -44,3 +44,20 @@ Install dependencies:
 
 ```bash
 sudo pacman -S --needed base-devel cmake gcc opencv pkgconf
+```
+
+## Screenshots
+
+The following screenshot files are in `assets/`:
+
+- `assets/OK.png`
+- `assets/DROWSY.png`
+- `assets/ALERT.png`
+
+Preview:
+
+![OK](assets/OK.png)
+
+![Drowsy](assets/DROWSY.png)
+
+![Alert](assets/ALERT.png)
