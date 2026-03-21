@@ -284,6 +284,11 @@ int main(int argc, char** argv) {
         cv::resizeWindow("Cabin Drowsiness Demo", 1280, 720);
 
         while (true) {
+            const double visible = cv::getWindowProperty("Cabin Drowsiness Demo", cv::WND_PROP_VISIBLE);
+            if (visible < 1.0) {
+                break;
+            }
+
             cv::Mat frame;
             if (!cap.read(frame) || frame.empty()) {
                 std::cerr << "Failed to read frame\n";
@@ -405,12 +410,6 @@ int main(int argc, char** argv) {
             }
 
             cv::imshow("Cabin Drowsiness Demo", frame);
-
-            // Detect window close (X button) and exit cleanly.
-            const double visible = cv::getWindowProperty("Cabin Drowsiness Demo", cv::WND_PROP_VISIBLE);
-            if (visible < 1.0) {
-                break;
-            }
 
             const int key = cv::waitKey(1);
             if (key == 27 || key == 'q' || key == 'Q') {
