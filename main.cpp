@@ -1,54 +1,25 @@
+#include "drowsiness_monitor.h"
+#include "alert_sound.h"
+#include "cascade_loader.h"
+
 #include <opencv2/opencv.hpp>
 
 #include <algorithm>
 #include <chrono>
-#include <cstdlib>
-#include <filesystem>
-#include <iomanip>
 #include <iostream>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-namespace fs = std::filesystem;
-using Clock = std::chrono::steady_clock;
-
-enum class DrowsinessState {
-    Unknown,
-    OK,
-    Drowsy,
-    Alert
-};
-
-static std::string stateToString(DrowsinessState state) {
-    switch (state) {
-        case DrowsinessState::Unknown: return "UNKNOWN";
-        case DrowsinessState::OK:      return "OK";
-        case DrowsinessState::Drowsy:   return "DROWSY";
-        case DrowsinessState::Alert:    return "ALERT";
-    }
-    return "UNKNOWN";
-}
-
-static long long toMs(const Clock::duration& d) {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(d).count();
-}
-
-static std::optional<std::string> firstExistingPath(const std::vector<std::string>& candidates) {
-    for (const auto& p : candidates) {
-        if (!p.empty() && fs::exists(p)) {
-            return p;
-        }
-    }
-    return std::nullopt;
-}
 
 struct Options {
     int cameraIndex = 0;
     std::string faceCascadePath;
     std::string eyeCascadePath;
 };
+
+static long long toMs(const std::chrono::steady_clock::duration& d) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(d).count();
+}
 
 static Options parseArgs(int argc, char** argv) {
     Options opt;
@@ -85,66 +56,6 @@ static Options parseArgs(int argc, char** argv) {
     return opt;
 }
 
-class DrowsinessMonitor {
-public:
-    struct Result {
-        DrowsinessState state = DrowsinessState::Unknown;
-        bool eyesVisible = false;
-        bool eyesClosed = false;
-        int blinkCount = 0;
-        long long closedMs = 0;
-    };
-
-    Result update(bool eyesVisible, Clock::time_point now) {
-        result_.eyesVisible = eyesVisible;
-
-        if (eyesVisible) {
-            if (eyesClosed_) {
-                const auto closedDurationMs = toMs(now - closedSince_);
-                if (closedDurationMs >= blinkMinMs_ && closedDurationMs <= blinkMaxMs_) {
-                    ++blinkCount_;
-                }
-            }
-
-            eyesClosed_ = false;
-            result_.eyesClosed = false;
-            result_.closedMs = 0;
-            result_.state = DrowsinessState::OK;
-        } else {
-            if (!eyesClosed_) {
-                eyesClosed_ = true;
-                closedSince_ = now;
-            }
-
-            result_.eyesClosed = true;
-            result_.closedMs = toMs(now - closedSince_);
-
-            if (result_.closedMs >= alertThresholdMs_) {
-                result_.state = DrowsinessState::Alert;
-            } else if (result_.closedMs >= drowsyThresholdMs_) {
-                result_.state = DrowsinessState::Drowsy;
-            } else {
-                result_.state = DrowsinessState::OK;
-            }
-        }
-
-        result_.blinkCount = blinkCount_;
-        return result_;
-    }
-
-private:
-    bool eyesClosed_ = false;
-    Clock::time_point closedSince_{};
-    int blinkCount_ = 0;
-
-    Result result_{};
-
-    const long long blinkMinMs_ = 50;
-    const long long blinkMaxMs_ = 700;
-    const long long drowsyThresholdMs_ = 1200;
-    const long long alertThresholdMs_ = 2500;
-};
-
 static void drawLabel(cv::Mat& frame,
                       const std::string& text,
                       const cv::Point& origin,
@@ -160,83 +71,6 @@ static void drawLabel(cv::Mat& frame,
                   cv::Scalar(0, 0, 0),
                   cv::FILLED);
     cv::putText(frame, text, origin, fontFace, fontScale, color, thickness, cv::LINE_AA);
-}
-
-static std::string defaultFaceCascade() {
-    const auto path = firstExistingPath({
-        "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml",
-        "/usr/share/opencv/haarcascades/haarcascade_frontalface_default.xml",
-        "/usr/local/share/opencv4/haarcascades/haarcascade_frontalface_default.xml"
-    });
-    if (!path) {
-        throw std::runtime_error(
-            "Cannot find haarcascade_frontalface_default.xml. "
-            "Pass --face-cascade PATH.");
-    }
-    return *path;
-}
-
-static std::string defaultEyeCascade() {
-    const auto path = firstExistingPath({
-        "/usr/share/opencv4/haarcascades/haarcascade_eye_tree_eyeglasses.xml",
-        "/usr/share/opencv/haarcascades/haarcascade_eye_tree_eyeglasses.xml",
-        "/usr/local/share/opencv4/haarcascades/haarcascade_eye_tree_eyeglasses.xml"
-    });
-    if (!path) {
-        throw std::runtime_error(
-            "Cannot find haarcascade_eye_tree_eyeglasses.xml. "
-            "Pass --eye-cascade PATH.");
-    }
-    return *path;
-}
-
-static std::string defaultAlertSoundPath() {
-    const auto path = firstExistingPath({
-        "assets/beep-01a.wav",
-        "../assets/beep-01a.wav",
-        "/usr/share/cabin_drowsiness_demo/assets/beep-01a.wav"
-    });
-    if (!path) {
-        throw std::runtime_error(
-            "Cannot find alert sound file beep-01a.wav. "
-            "Place it in assets/ or pass the path by setting AUDIO_PATH environment variable.");
-    }
-    return *path;
-}
-
-static std::string findAudioPlayer() {
-    const std::vector<std::string> candidates = {"aplay", "paplay", "play"};
-    for (const auto& name : candidates) {
-        const std::string cmd = "command -v " + name + " > /dev/null 2>&1";
-        if (std::system(cmd.c_str()) == 0) {
-            return name;
-        }
-    }
-    return "";
-}
-
-static void playAlertSound(const std::string& audioPath) {
-    if (!fs::exists(audioPath)) {
-        std::cerr << "Warning: alert sound not found: " << audioPath << "\n";
-        return;
-    }
-
-    const auto player = findAudioPlayer();
-    if (player.empty()) {
-        std::cerr << "Warning: no audio player found (aplay/paplay/play). Install one to enable alert sound.\n";
-        return;
-    }
-
-    std::string cmd;
-    if (player == "aplay") {
-        cmd = "aplay -q \"" + audioPath + "\" &";
-    } else if (player == "paplay") {
-        cmd = "paplay \"" + audioPath + "\" &";
-    } else {
-        cmd = "play -q \"" + audioPath + "\" &";
-    }
-
-    std::system(cmd.c_str());
 }
 
 int main(int argc, char** argv) {
