@@ -75,6 +75,15 @@ target_compile_features(cabin_drowsiness_demo PRIVATE cxx_std_17)
 target_compile_options(cabin_drowsiness_demo PRIVATE ${AUTOSAR_WARNING_FLAGS})
 target_link_libraries(cabin_drowsiness_demo PRIVATE drowsiness_monitor alert_sound cascade_loader ${OpenCV_LIBS})
 
+# Unit tests
+enable_testing()
+add_executable(unit_tests tests/drowsiness_monitor_test.cpp)
+target_compile_features(unit_tests PRIVATE cxx_std_17)
+target_compile_options(unit_tests PRIVATE ${AUTOSAR_WARNING_FLAGS})
+target_include_directories(unit_tests PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(unit_tests PRIVATE drowsiness_monitor)
+add_test(NAME DrowsinessMonitorTests COMMAND unit_tests)
+
 # AUTOSAR: Enable static analysis if available
 option(ENABLE_STATIC_ANALYSIS "Enable static analysis tools" OFF)
 if(ENABLE_STATIC_ANALYSIS)
